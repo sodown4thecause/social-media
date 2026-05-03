@@ -1,0 +1,76 @@
+from __future__ import annotations
+from typing import Dict, List
+
+# Initial 10 pain-based clusters with 5–8 seed exemplars each
+SEED_EXEMPLARS: Dict[str, List[str]] = {
+    "too expensive": [
+        "This tool is overpriced for what it does.",
+        "Pricing is too high compared to alternatives.",
+        "Budget is tight; can't justify the subscription.",
+        "Costs add up quickly with this platform.",
+        "Is there a cheaper option that does the same?",
+    ],
+    "too complex": [
+        "Feels overcomplicated for a simple workflow.",
+        "UI is confusing; too many knobs for basic tasks.",
+        "Steep learning curve; need something simpler.",
+        "Took hours to figure out a basic setup.",
+        "Docs are dense; I just want a straightforward tool.",
+    ],
+    "looking for alternative": [
+        "I need an alternative to [tool].",
+        "Switching from [tool]; what else should I try?",
+        "Not happy with [tool]; any recommendations?",
+        "What are good competitors to [tool]?",
+        "Best replacement for [tool]?",
+    ],
+    "AI curiosity": [
+        "How do AI SEO tools compare to traditional?",
+        "Curious if AI can automate keyword research.",
+        "What does AI actually help with here?",
+        "Exploring AI-based workflows for content.",
+        "What are AI-first approaches for this task?",
+    ],
+    "agency frustration": [
+        "Agency keeps overpromising and underdelivering.",
+        "Tired of paying retainers without results.",
+        "Looking to bring SEO in-house.",
+        "Agency is slow and unresponsive.",
+        "Need more transparent reporting than agency provides.",
+    ],
+    "SEO stack fatigue": [
+        "Too many tools; want to consolidate.",
+        "Juggling Ahrefs, Semrush, GSC is exhausting.",
+        "Hate switching between multiple dashboards.",
+        "Too much overlap between tools.",
+        "Prefer one tool that covers the basics well.",
+    ],
+    "migration help": [
+        "Migrating site; worried about losing rankings.",
+        "Need guidance on moving platforms without SEO hit.",
+        "Any checklist for SEO migration?",
+        "How to avoid 404s and redirect mess during migration?",
+        "Best practices for domain change?",
+    ],
+    "ROI/benchmarking": [
+        "How do I prove ROI from SEO?",
+        "What benchmarks should I expect?",
+        "Client wants concrete results.",
+        "Need clear KPIs and timelines.",
+        "What is a realistic timeline for impact?",
+    ],
+    "pricing transparency": [
+        "Hidden fees or paywalls are frustrating.",
+        "Pricing page is unclear.",
+        "Want simple, transparent pricing tiers.",
+        "Hate feature gating behind higher tiers.",
+        "How much will this actually cost me per month?",
+    ],
+    "integration friction": [
+        "Struggling to connect with my existing stack.",
+        "APIs are limited or complex.",
+        "Need native integrations with the basics.",
+        "Zapier/Integromat setup is flaky.",
+        "Import/export between tools is a pain.",
+    ],
+}

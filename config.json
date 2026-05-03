@@ -1,0 +1,77 @@
+{
+  "db_path": "data.sqlite3",
+  "min_interval_minutes": 10,
+  "prefilter_threshold": 0.35,
+
+  "reddit": {
+    "subreddits": ["SEO", "bigseo", "marketing"],
+    "limit_per_feed": 25
+  },
+
+  "hackernews": {
+    "enabled": true,
+    "limit": 30,
+    "min_points": 5
+  },
+
+  "producthunt": {
+    "enabled": true,
+    "limit": 20,
+    "topic": "developer-tools"
+  },
+
+  "indiehackers": {
+    "enabled": true,
+    "limit": 20
+  },
+
+  "capterra": {
+    "enabled": true,
+    "categories": ["seo-software", "marketing-analytics"],
+    "reviews_per_category": 20
+  },
+
+  "g2": {
+    "enabled": true,
+    "categories": ["seo", "marketing-analytics"],
+    "reviews_per_category": 20
+  },
+
+  "x": {
+    "search_queries": [],
+    "nitter_base": "https://nitter.net"
+  },
+
+  "jina": {
+    "model": "jina-embeddings-v5-text-nano",
+    "dimensions": 512,
+    "batch_size": 32
+  },
+
+  "intent": {
+    "threshold": 0.45,
+    "avg_top2_threshold": 0.42,
+    "batch_size": 100,
+    "local_threshold": 0.35,
+    "local_avg_top2_threshold": 0.37
+  },
+
+  "enrichment": {
+    "daily_budget_cents": 150,
+    "intents": ["pricing transparency", "looking for alternative", "ROI/benchmarking"],
+    "perplexity_enabled": true,
+    "perplexity_model": "sonar-pro",
+    "perplexity_cost_cents": 5,
+    "dataforseo_enabled": true,
+    "dataforseo_login": "",
+    "dataforseo_password": "",
+    "dataforseo_location_name": "United States",
+    "dataforseo_language_name": "English",
+    "dataforseo_depth": 10,
+    "dataforseo_cost_cents": 25,
+    "firecrawl_enabled": true,
+    "firecrawl_model": "spark-1-mini",
+    "firecrawl_max_credits": 50,
+    "firecrawl_cost_cents": 20
+  }
+}

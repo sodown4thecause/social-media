@@ -1,0 +1,11 @@
+# Archon runtime artifacts
+.archon/state/
+.archon/.env
+
+# Python
+__pycache__/
+*.pyc
+
+# SQLite
+data.sqlite3-shm
+data.sqlite3-wal
