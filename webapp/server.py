@@ -408,6 +408,8 @@ class AppHandler(BaseHTTPRequestHandler):
                 self.send_json(candidate_detail(candidate_id))
             elif parsed.path == "/api/leads":
                 self.send_json(lead_rows(parse_qs(parsed.query)))
+            elif parsed.path.startswith("/api/"):
+                self.send_error_json("route not found", HTTPStatus.NOT_FOUND)
             else:
                 self.send_static(parsed.path)
         except KeyError as exc:

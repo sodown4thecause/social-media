@@ -33,7 +33,13 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  const payload = await response.json();
+  const text = await response.text();
+  let payload;
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(`Expected JSON from ${path}, got ${text.slice(0, 40) || "empty response"}`);
+  }
   if (!response.ok) {
     throw new Error(payload.error || "Request failed");
   }
