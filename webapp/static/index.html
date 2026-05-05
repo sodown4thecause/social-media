@@ -34,6 +34,10 @@
             <span class="nav-icon">S</span>
             Sources
           </button>
+          <button class="nav-item" data-view="pipeline">
+            <span class="nav-icon">R</span>
+            Run Pipeline
+          </button>
         </nav>
 
         <div class="sidebar-note">
@@ -180,6 +184,44 @@
               <div id="sourceHealth" class="health-list"></div>
             </section>
           </div>
+        </section>
+
+        <section class="view" id="pipelineView">
+          <div class="section-header">
+            <div>
+              <h2>Pipeline Runner</h2>
+              <p>Run the same ingestion, intent, reply, and enrichment steps without touching PowerShell.</p>
+            </div>
+            <span class="pipeline-state" id="pipelineState">Idle</span>
+          </div>
+
+          <div class="pipeline-grid">
+            <button class="run-card primary-run" type="button" data-pipeline-action="full">
+              <strong>Run full pipeline</strong>
+              <span>Ingest → intents → replies → enrichment</span>
+            </button>
+            <button class="run-card" type="button" data-pipeline-action="ingest">
+              <strong>Ingest sources</strong>
+              <span>Reddit, X, ProductHunt, IndieHackers, HN, review sites</span>
+            </button>
+            <button class="run-card" type="button" data-pipeline-action="intents">
+              <strong>Compute intents</strong>
+              <span>Jina embeddings with local fallback</span>
+            </button>
+            <button class="run-card" type="button" data-pipeline-action="generate">
+              <strong>Generate replies</strong>
+              <span>Grok-backed reply candidates</span>
+            </button>
+            <button class="run-card" type="button" data-pipeline-action="enrich">
+              <strong>Enrich evidence</strong>
+              <span>Perplexity, DataForSEO, Firecrawl, Browser Use</span>
+            </button>
+          </div>
+
+          <section class="insight-panel pipeline-log-panel">
+            <h3>Run Log</h3>
+            <div id="pipelineLog" class="pipeline-log"></div>
+          </section>
         </section>
       </main>
     </div>

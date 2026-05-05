@@ -23,6 +23,8 @@ const els = {
   sourceHealth: document.querySelector("#sourceHealth"),
   sourceCheckBtn: document.querySelector("#sourceCheckBtn"),
   deepSourceCheckBtn: document.querySelector("#deepSourceCheckBtn"),
+  pipelineState: document.querySelector("#pipelineState"),
+  pipelineLog: document.querySelector("#pipelineLog"),
   toast: document.querySelector("#toast"),
 };
 
@@ -297,6 +299,7 @@ function switchView(view) {
   });
   if (view === "leads") loadLeads().catch((error) => toast(error.message));
   if (view === "sources") loadSourceHealth(false).catch((error) => toast(error.message));
+  if (view === "pipeline") loadPipelineStatus().catch((error) => toast(error.message));
 }
 
 function healthBadge(status) {
@@ -340,6 +343,39 @@ async function loadSourceHealth(deep = false) {
   renderProviderHealth(data.providers);
   renderSourceHealth(data.sources);
   toast(deep ? "Deep source check finished." : "Source check finished.");
+}
+
+function renderPipelineStatus(status) {
+  if (!els.pipelineState || !els.pipelineLog) return;
+  els.pipelineState.textContent = status.running ? `Running: ${status.stage || "working"}` : "Idle";
+  els.pipelineState.classList.toggle("is-running", Boolean(status.running));
+  const history = status.history || [];
+  els.pipelineLog.innerHTML = history.length
+    ? history.slice().reverse().map((event) => `
+      <div class="pipeline-log-row">
+        <div>
+          <strong>${escapeHtml(event.stage)}</strong>
+          <p class="muted">${escapeHtml(event.error || "Completed")} · ${escapeHtml(new Date((event.finished_at || 0) * 1000).toLocaleString())}</p>
+        </div>
+        ${healthBadge(event.status)}
+      </div>
+    `).join("")
+    : `<div class="muted">No pipeline runs yet.</div>`;
+}
+
+async function loadPipelineStatus() {
+  const status = await api("/api/pipeline/status");
+  renderPipelineStatus(status);
+  return status;
+}
+
+async function runPipeline(action) {
+  await api("/api/pipeline/run", {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+  toast("Pipeline started.");
+  await loadPipelineStatus();
 }
 
 async function refreshAll(selectFirst = false) {
@@ -390,6 +426,9 @@ document.querySelectorAll(".nav-item").forEach((button) => {
 els.refreshBtn.addEventListener("click", () => refreshAll(false).catch((error) => toast(error.message)));
 els.sourceCheckBtn?.addEventListener("click", () => loadSourceHealth(false).catch((error) => toast(error.message)));
 els.deepSourceCheckBtn?.addEventListener("click", () => loadSourceHealth(true).catch((error) => toast(error.message)));
+document.querySelectorAll("[data-pipeline-action]").forEach((button) => {
+  button.addEventListener("click", () => runPipeline(button.dataset.pipelineAction).catch((error) => toast(error.message)));
+});
 els.sourceFilter.addEventListener("change", () => loadInbox(true).catch((error) => toast(error.message)));
 els.scoreFilter.addEventListener("change", () => loadInbox(true).catch((error) => toast(error.message)));
 els.leadStatusFilter.addEventListener("change", () => loadLeads().catch((error) => toast(error.message)));
@@ -401,3 +440,9 @@ els.searchInput.addEventListener("input", () => {
 });
 
 refreshAll(true).catch((error) => toast(error.message));
+
+window.setInterval(() => {
+  if (state.view === "pipeline") {
+    loadPipelineStatus().catch(() => {});
+  }
+}, 3000);

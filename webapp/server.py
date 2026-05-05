@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from html import unescape
@@ -22,6 +23,21 @@ DB_PATH = ROOT / "data.sqlite3"
 TAG_RE = re.compile(r"<[^>]+>")
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 WS_RE = re.compile(r"\s+")
+PIPELINE_LOCK = threading.Lock()
+PIPELINE_STATE: dict[str, Any] = {
+    "running": False,
+    "stage": None,
+    "last_run": None,
+    "last_error": None,
+    "history": [],
+}
+PIPELINE_STAGES = {
+    "ingest": ("Ingest sources", lambda: __import__("ingestion.ingest", fromlist=["main"]).main()),
+    "intents": ("Compute intents", lambda: __import__("ingestion.compute_intents", fromlist=["classify_posts"]).classify_posts()),
+    "generate": ("Generate replies", lambda: __import__("ingestion.generate_and_score", fromlist=["generate_and_score"]).generate_and_score()),
+    "enrich": ("Enrich evidence", lambda: __import__("ingestion.enrich", fromlist=["enrich_once"]).enrich_once()),
+}
+FULL_PIPELINE = ["ingest", "intents", "generate", "enrich"]
 
 
 def get_con() -> sqlite3.Connection:
@@ -106,6 +122,71 @@ def summary() -> dict[str, Any]:
             """
         ).fetchall()]
         return {"stats": stats, "sources": source_list(con), "by_source": by_source, "by_intent": by_intent}
+
+
+def pipeline_status() -> dict[str, Any]:
+    with PIPELINE_LOCK:
+        return {
+            "running": PIPELINE_STATE["running"],
+            "stage": PIPELINE_STATE["stage"],
+            "last_run": PIPELINE_STATE["last_run"],
+            "last_error": PIPELINE_STATE["last_error"],
+            "history": list(PIPELINE_STATE["history"][-8:]),
+        }
+
+
+def _record_pipeline_event(stage: str, status: str, started_at: int, error: str | None = None) -> None:
+    event = {
+        "stage": stage,
+        "status": status,
+        "started_at": started_at,
+        "finished_at": int(time.time()),
+        "error": error,
+    }
+    with PIPELINE_LOCK:
+        PIPELINE_STATE["history"].append(event)
+        PIPELINE_STATE["history"] = PIPELINE_STATE["history"][-20:]
+        PIPELINE_STATE["last_run"] = event
+        PIPELINE_STATE["last_error"] = error
+
+
+def _run_pipeline_job(stages: list[str]) -> None:
+    try:
+        for stage in stages:
+            label, fn = PIPELINE_STAGES[stage]
+            started_at = int(time.time())
+            with PIPELINE_LOCK:
+                PIPELINE_STATE["stage"] = label
+            try:
+                fn()
+                _record_pipeline_event(label, "ok", started_at)
+            except Exception as exc:
+                _record_pipeline_event(label, "error", started_at, f"{type(exc).__name__}: {exc}")
+                break
+    finally:
+        with PIPELINE_LOCK:
+            PIPELINE_STATE["running"] = False
+            PIPELINE_STATE["stage"] = None
+
+
+def start_pipeline(action: str) -> dict[str, Any]:
+    if action == "full":
+        stages = FULL_PIPELINE
+    elif action in PIPELINE_STAGES:
+        stages = [action]
+    else:
+        raise ValueError("unknown pipeline action")
+
+    with PIPELINE_LOCK:
+        if PIPELINE_STATE["running"]:
+            raise RuntimeError(f"pipeline already running: {PIPELINE_STATE['stage']}")
+        PIPELINE_STATE["running"] = True
+        PIPELINE_STATE["stage"] = "Starting"
+        PIPELINE_STATE["last_error"] = None
+
+    thread = threading.Thread(target=_run_pipeline_job, args=(stages,), daemon=True)
+    thread.start()
+    return {"ok": True, "action": action, "stages": stages}
 
 
 def inbox(params: dict[str, list[str]]) -> list[dict[str, Any]]:
@@ -318,6 +399,8 @@ class AppHandler(BaseHTTPRequestHandler):
                 params = parse_qs(parsed.query)
                 deep = params.get("deep", ["false"])[0].lower() in {"1", "true", "yes"}
                 self.send_json(source_health(include_browser_sources=deep))
+            elif parsed.path == "/api/pipeline/status":
+                self.send_json(pipeline_status())
             elif parsed.path == "/api/inbox":
                 self.send_json(inbox(parse_qs(parsed.query)))
             elif parsed.path.startswith("/api/candidates/"):
@@ -342,8 +425,12 @@ class AppHandler(BaseHTTPRequestHandler):
             elif parsed.path.startswith("/api/leads/") and parsed.path.endswith("/status"):
                 lead_id = int(parsed.path.split("/")[-2])
                 self.send_json(change_lead_status(lead_id, payload))
+            elif parsed.path == "/api/pipeline/run":
+                self.send_json(start_pipeline(str(payload.get("action") or "")))
             else:
                 self.send_error_json("route not found", HTTPStatus.NOT_FOUND)
+        except RuntimeError as exc:
+            self.send_error_json(str(exc), HTTPStatus.CONFLICT)
         except ValueError as exc:
             self.send_error_json(str(exc), HTTPStatus.BAD_REQUEST)
         except KeyError as exc:

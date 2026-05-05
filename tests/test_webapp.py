@@ -38,6 +38,31 @@ def test_source_health_endpoint_uses_light_check_by_default(monkeypatch):
     assert payload["sources"]["x"]["status"] == "ok"
 
 
+def test_start_pipeline_runs_stage_and_records_history(monkeypatch):
+    calls = []
+    monkeypatch.setitem(server.PIPELINE_STAGES, "ingest", ("Ingest sources", lambda: calls.append("ingest")))
+    with server.PIPELINE_LOCK:
+        server.PIPELINE_STATE.update({
+            "running": False,
+            "stage": None,
+            "last_run": None,
+            "last_error": None,
+            "history": [],
+        })
+
+    result = server.start_pipeline("ingest")
+
+    deadline = time.time() + 2
+    while server.pipeline_status()["running"] and time.time() < deadline:
+        time.sleep(0.01)
+
+    status = server.pipeline_status()
+    assert result["ok"] is True
+    assert calls == ["ingest"]
+    assert status["running"] is False
+    assert status["history"][-1]["status"] == "ok"
+
+
 def test_record_decision_can_create_lead(monkeypatch):
     from ingestion.db import connect, init_db, upsert_intent, upsert_posts
 

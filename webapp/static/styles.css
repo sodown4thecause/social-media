@@ -528,6 +528,88 @@ textarea {
   gap: 14px;
 }
 
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.run-card {
+  min-height: 112px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.run-card:hover {
+  border-color: #b9c2b7;
+  background: #f9fbf8;
+}
+
+.run-card strong {
+  font-size: 18px;
+}
+
+.run-card span {
+  color: var(--muted);
+}
+
+.run-card.primary-run {
+  grid-column: 1 / -1;
+  min-height: 128px;
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+
+.run-card.primary-run span {
+  color: #e7f5ed;
+}
+
+.pipeline-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.pipeline-state.is-running {
+  background: var(--green-2);
+  color: var(--green);
+}
+
+.pipeline-log-panel {
+  margin-top: 14px;
+}
+
+.pipeline-log {
+  display: grid;
+  gap: 10px;
+}
+
+.pipeline-log-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcf9;
+}
+
 .insight-panel {
   padding: 18px;
 }
@@ -707,6 +789,7 @@ textarea {
   .toolbar,
   .insight-grid,
   .source-health-grid,
+  .pipeline-grid,
   .lead-row {
     grid-template-columns: 1fr;
   }
