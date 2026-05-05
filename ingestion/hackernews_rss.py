@@ -1,15 +1,16 @@
 from __future__ import annotations
 import hashlib
+import re
 import time
 from typing import Dict, Any, Iterable, List
 
-import feedparser
-
 from .prefilter import prefilter
 from .logging_config import log
+from .feed_utils import clean_feed_text, fetch_feed
 
 HN_RSS_URL = "https://hnrss.org/frontpage?points={min_points}&count={limit}"
 HN_SEARCH_RSS = "https://hnrss.org/newest?q={query}&points={min_points}&count={limit}"
+HN_METADATA_RE = re.compile(r"\s*(?:Article URL|Comments URL|Points|# Comments):.*$", re.IGNORECASE)
 
 
 def fetch_hackernews(limit: int = 30, min_points: int = 5, query: str | None = None) -> Iterable[Dict[str, Any]]:
@@ -19,7 +20,7 @@ def fetch_hackernews(limit: int = 30, min_points: int = 5, query: str | None = N
         url = HN_RSS_URL.format(min_points=min_points, limit=limit)
 
     log.info("Fetching HackerNews RSS", extra={"url": url})
-    feed = feedparser.parse(url)
+    feed = fetch_feed(url)
     for entry in feed.entries:
         title = (entry.get("title") or "").strip()
         link = entry.get("link") or ""
@@ -28,7 +29,8 @@ def fetch_hackernews(limit: int = 30, min_points: int = 5, query: str | None = N
         created_at = int(time.mktime(published_parsed)) if published_parsed else int(time.time())
 
         # hn_description may contain the self-post text
-        description = (entry.get("hn_description") or entry.get("summary") or "").strip()
+        description = clean_feed_text(entry.get("hn_description") or entry.get("summary"))
+        description = HN_METADATA_RE.sub("", description).strip()
         text = f"{title}\n{description}" if description else title
 
         # approximate engagement from points

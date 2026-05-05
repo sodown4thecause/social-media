@@ -3,8 +3,38 @@
   "min_interval_minutes": 10,
   "prefilter_threshold": 0.35,
 
+  "product": {
+    "name": "FlowIntent",
+    "tagline": "AI-powered chat interface for SEO/GEO",
+    "url": "https://flowintent.com",
+    "key_features": [
+      "SEO/GEO chatbot interface — ask questions naturally instead of learning complex dashboards",
+      "Brand voice extraction for AI content generation + image generation",
+      "RAG personalization from onboarding data",
+      "Weekly updated research, case studies, whitepapers, and SEO/AEO insights",
+      "Multi-source data blending: DataForSEO, Perplexity, Firecrawl, Exa, Peec.ai MCPs"
+    ],
+    "differentiators": [
+      "Chat-based UX — no complex dashboards or steep learning curves",
+      "Brand voice AI that learns your tone for content generation",
+      "RAG-powered personalization from your onboarding data",
+      "Blends DataForSEO, Perplexity, Firecrawl, Exa, and Peec.ai MCPs in one chat",
+      "Content generation + image generation with your brand voice",
+      "Weekly fresh research, case studies, whitepapers, and SEO/AEO insights",
+      "Free month trial, then $39/mo — vs $100+/mo for Ahrefs/Semrush"
+    ],
+    "pricing_hint": "Free month trial, then $39/mo",
+    "competitors": ["ahrefs", "semrush", "moz", "screaming frog", "surferseo"],
+    "tone_guidelines": "Casual, helpful, authentic. Never salesy. Sound like a real person sharing experience. Never use exclamation marks. Mention FlowIntent naturally when genuinely relevant — like you'd mention any tool you use. Never disparage competitors. Focus on value first. If pricing comes up: free month trial then $39/mo."
+  },
+
   "reddit": {
-    "subreddits": ["SEO", "bigseo", "marketing"],
+    "subreddits": [
+      "SEO", "bigseo", "marketing", "Entrepreneur", "SaaS",
+      "startups", "smallbusiness", "digitalmarketing",
+      "content_marketing", "PPC", "juststart", "WordPress",
+      "webdev", "SideProject"
+    ],
     "limit_per_feed": 25
   },
 
@@ -17,7 +47,8 @@
   "producthunt": {
     "enabled": true,
     "limit": 20,
-    "topic": "developer-tools"
+    "topic": "marketing",
+    "secondary_topic": "artificial-intelligence"
   },
 
   "indiehackers": {
@@ -28,18 +59,58 @@
   "capterra": {
     "enabled": true,
     "categories": ["seo-software", "marketing-analytics"],
-    "reviews_per_category": 20
+    "competitor_slugs": [
+      "135570/ahrefs",
+      "145262/semrush",
+      "110038/moz-pro",
+      "145261/screaming-frog-seo-spider",
+      "218439/surferseo"
+    ],
+    "reviews_per_category": 20,
+    "max_review_stars": 3
   },
 
   "g2": {
     "enabled": true,
     "categories": ["seo", "marketing-analytics"],
-    "reviews_per_category": 20
+    "competitor_products": [
+      "ahrefs",
+      "semrush",
+      "moz-pro",
+      "screaming-frog",
+      "surfer"
+    ],
+    "reviews_per_category": 20,
+    "max_review_stars": 3
   },
 
   "x": {
-    "search_queries": [],
-    "nitter_base": "https://nitter.net"
+    "search_queries": [
+      "SEO chat",
+      "AI SEO tool",
+      "keyword research tool",
+      "Ahrefs alternative",
+      "Semrush alternative",
+      "Moz alternative",
+      "best SEO tool",
+      "SEO help",
+      "SEO advice",
+      "recommend SEO tool",
+      "GEO SEO",
+      "AEO answer engine optimization",
+      "Google AI Overview SEO",
+      "content optimization tool",
+      "technical SEO help",
+      "backlink strategy"
+    ],
+    "nitter_base": "https://nitter.net",
+    "nitter_fallbacks": [
+      "https://nitter.privacydev.net",
+      "https://nitter.poast.org",
+      "https://nitter.1d4.us"
+    ],
+    "max_queries_per_run": 5,
+    "getxapi_product": "Latest"
   },
 
   "jina": {
@@ -58,13 +129,21 @@
 
   "enrichment": {
     "daily_budget_cents": 150,
-    "intents": ["pricing transparency", "looking for alternative", "ROI/benchmarking"],
+    "intents": [
+      "pricing transparency",
+      "looking for alternative",
+      "ROI/benchmarking",
+      "AI for SEO",
+      "AI curiosity",
+      "SEO stack fatigue",
+      "GEO/answer engines",
+      "brand voice/content gen"
+    ],
     "perplexity_enabled": true,
     "perplexity_model": "sonar-pro",
     "perplexity_cost_cents": 5,
     "dataforseo_enabled": true,
-    "dataforseo_login": "",
-    "dataforseo_password": "",
+
     "dataforseo_location_name": "United States",
     "dataforseo_language_name": "English",
     "dataforseo_depth": 10,
@@ -72,6 +151,57 @@
     "firecrawl_enabled": true,
     "firecrawl_model": "spark-1-mini",
     "firecrawl_max_credits": 50,
-    "firecrawl_cost_cents": 20
+    "firecrawl_cost_cents": 20,
+    "browser_use_enabled": true,
+    "browser_use_cost_cents": 30
+  },
+
+  "lead_scoring": {
+    "intent_weights": {
+      "looking for alternative": 30,
+      "SEO stack fatigue": 28,
+      "pricing transparency": 25,
+      "AI for SEO": 25,
+      "GEO/answer engines": 25,
+      "brand voice/content gen": 22,
+      "too expensive": 20,
+      "ROI/benchmarking": 18,
+      "agency frustration": 18,
+      "too complex": 15,
+      "AI curiosity": 15,
+      "keyword research help": 12,
+      "content optimization": 12,
+      "technical SEO": 10,
+      "SERP analysis": 10,
+      "link building": 8,
+      "local SEO": 8,
+      "migration help": 5,
+      "integration friction": 5
+    },
+    "source_quality": {
+      "reddit": 10,
+      "capterra": 15,
+      "g2": 15,
+      "x": 8,
+      "producthunt": 12,
+      "indiehackers": 10,
+      "hackernews": 5
+    },
+    "negative_sentiment_bonus": 20,
+    "enrichment_bonus": 5,
+    "auto_create_threshold": 0.6,
+    "high_value_threshold": 50
+  },
+
+  "posting": {
+    "enabled": false,
+    "dry_run_default": true,
+    "auto_post": false,
+    "reddit_max_per_hour": 3,
+    "reddit_max_per_day": 20,
+    "reddit_cooldown_seconds": 600,
+    "x_max_per_hour": 5,
+    "x_max_per_day": 30,
+    "x_cooldown_seconds": 720
   }
 }

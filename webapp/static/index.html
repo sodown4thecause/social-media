@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FlowIntent Lead Radar</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">FI</div>
+          <div>
+            <div class="brand-name">FlowIntent</div>
+            <div class="brand-subtitle">Lead Radar</div>
+          </div>
+        </div>
+
+        <nav class="nav-stack" aria-label="Primary">
+          <button class="nav-item is-active" data-view="inbox">
+            <span class="nav-icon">I</span>
+            Signals Inbox
+          </button>
+          <button class="nav-item" data-view="leads">
+            <span class="nav-icon">L</span>
+            Leads
+          </button>
+          <button class="nav-item" data-view="insights">
+            <span class="nav-icon">P</span>
+            Pain Map
+          </button>
+          <button class="nav-item" data-view="sources">
+            <span class="nav-icon">S</span>
+            Sources
+          </button>
+        </nav>
+
+        <div class="sidebar-note">
+          <div class="note-title">Human review is on</div>
+          <p>Nothing is sent automatically. Approvals create a reviewed reply and optional lead record.</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Competitor pain and lead intelligence</p>
+            <h1>Find the SEO buyers already telling you what hurts.</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="button ghost" id="refreshBtn" type="button">
+              <span class="button-icon">R</span>
+              Refresh
+            </button>
+            <a class="button primary" href="https://flowintent.com" target="_blank" rel="noreferrer">
+              FlowIntent
+            </a>
+          </div>
+        </header>
+
+        <section class="metric-grid" id="metricGrid" aria-label="Pipeline summary"></section>
+
+        <section class="view is-active" id="inboxView">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <label for="searchInput">Search</label>
+              <input id="searchInput" type="search" placeholder="competitor, intent, pain point">
+            </div>
+            <div class="select-wrap">
+              <label for="sourceFilter">Source</label>
+              <select id="sourceFilter"></select>
+            </div>
+            <div class="select-wrap short">
+              <label for="scoreFilter">Min score</label>
+              <select id="scoreFilter">
+                <option value="0">Any</option>
+                <option value="40">40+</option>
+                <option value="60">60+</option>
+                <option value="75">75+</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="workspace">
+            <section class="queue-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Review Queue</h2>
+                  <p id="queueCount">Loading signals</p>
+                </div>
+              </div>
+              <div class="signal-list" id="signalList"></div>
+            </section>
+
+            <section class="detail-panel" id="detailPanel">
+              <div class="empty-state">
+                <h2>No signal selected</h2>
+                <p>Select a signal from the queue to review context, edit the reply, and decide whether to create a lead.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="leadsView">
+          <div class="section-header">
+            <div>
+              <h2>Leads Pipeline</h2>
+              <p>Saved opportunities from review sites, communities, and social channels.</p>
+            </div>
+            <div class="select-wrap short">
+              <label for="leadStatusFilter">Status</label>
+              <select id="leadStatusFilter">
+                <option value="all">All</option>
+                <option value="new">New</option>
+                <option value="contacted">Contacted</option>
+                <option value="converted">Converted</option>
+                <option value="lost">Lost</option>
+                <option value="ignored">Ignored</option>
+              </select>
+            </div>
+          </div>
+          <div class="lead-table" id="leadTable"></div>
+        </section>
+
+        <section class="view" id="insightsView">
+          <div class="section-header">
+            <div>
+              <h2>Pain Map</h2>
+              <p>Where competitor frustration is clustering right now.</p>
+            </div>
+          </div>
+          <div class="insight-grid">
+            <section class="insight-panel">
+              <h3>Intent Clusters</h3>
+              <div id="intentBars" class="bar-list"></div>
+            </section>
+            <section class="insight-panel">
+              <h3>Source Mix</h3>
+              <div id="sourceBars" class="bar-list"></div>
+            </section>
+            <section class="insight-panel wide">
+              <h3>Launch Plays</h3>
+              <div class="play-list">
+                <div class="play-row">
+                  <strong>Review sites</strong>
+                  <span>Save as account-research leads. Do not DM reviewers cold.</span>
+                </div>
+                <div class="play-row">
+                  <strong>Communities</strong>
+                  <span>Reply publicly with a useful answer, then mention FlowIntent only when it genuinely fits.</span>
+                </div>
+                <div class="play-row">
+                  <strong>SEO threads</strong>
+                  <span>Prioritize posts that compare alternatives, complain about pricing, or ask about AI/GEO workflows.</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="sourcesView">
+          <div class="section-header">
+            <div>
+              <h2>Source Health</h2>
+              <p>Live checks for provider keys, source fetches, and fallback paths.</p>
+            </div>
+            <div class="topbar-actions">
+              <button class="button" id="sourceCheckBtn" type="button">Run check</button>
+              <button class="button ghost" id="deepSourceCheckBtn" type="button">Deep check</button>
+            </div>
+          </div>
+          <div class="source-health-grid">
+            <section class="insight-panel">
+              <h3>Providers</h3>
+              <div id="providerHealth" class="health-list"></div>
+            </section>
+            <section class="insight-panel">
+              <h3>Sources</h3>
+              <div id="sourceHealth" class="health-list"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

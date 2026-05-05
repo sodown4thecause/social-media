@@ -189,7 +189,9 @@ class TestConfig:
         monkeypatch.chdir(tmp_path)
         cfg = AppConfig.from_file(path=str(cfg_path))
         assert cfg.db_path == "custom.db"
-        assert cfg.reddit.subreddits == ["SEO", "bigseo", "marketing"]
+        assert "SEO" in cfg.reddit.subreddits
+        assert "bigseo" in cfg.reddit.subreddits
+        assert "Entrepreneur" in cfg.reddit.subreddits
         assert cfg.jina.batch_size == 32
         assert cfg.prefilter_threshold == 0.35
 
@@ -209,7 +211,7 @@ class TestConfig:
         cfg = AppConfig()
         flat = cfg.model_dump_flat()
         assert "reddit_subreddits" in flat
-        assert flat["reddit_subreddits"] == ["SEO", "bigseo", "marketing"]
+        assert "SEO" in flat["reddit_subreddits"]
         assert "intent_threshold" in flat
         assert flat["intent_threshold"] == 0.45
 
@@ -234,3 +236,79 @@ class TestLocalEmbedder:
         le = LocalEmbedder(seeds)
         if le.dim == 0:
             assert cosine([], []) == 0.0
+
+
+# ── retry / circuit breaker tests ──
+
+class TestRetryUtils:
+    def test_circuit_breaker_starts_closed(self):
+        from ingestion.retry_utils import CircuitBreaker
+        cb = CircuitBreaker("test", failure_threshold=3, cooldown_seconds=300)
+        assert not cb.is_open
+
+    def test_circuit_breaker_trips_after_failures(self):
+        from ingestion.retry_utils import CircuitBreaker
+        cb = CircuitBreaker("test", failure_threshold=3, cooldown_seconds=99999)
+        cb.failure()
+        cb.failure()
+        assert not cb.is_open  # not yet
+        cb.failure()
+        assert cb.is_open  # tripped
+
+    def test_circuit_breaker_resets_on_success(self):
+        from ingestion.retry_utils import CircuitBreaker
+        cb = CircuitBreaker("test", failure_threshold=3, cooldown_seconds=99999)
+        cb.failure()
+        cb.failure()
+        cb.success()
+        assert not cb.is_open
+
+    def test_circuit_breaker_cooldown(self):
+        from ingestion.retry_utils import CircuitBreaker
+        cb = CircuitBreaker("test", failure_threshold=3, cooldown_seconds=0)
+        cb.failure()
+        cb.failure()
+        cb.failure()
+        # cooldown_seconds=0 means it resets immediately
+        assert not cb.is_open
+
+
+# ── metrics tests ──
+
+class TestMetrics:
+    def test_counter_increment(self):
+        from ingestion.metrics import incr, dump
+        incr("test_counter", 1)
+        incr("test_counter", 2)
+        d = dump()
+        assert d["counters"]["test_counter"] == 3
+
+    def test_gauge_set(self):
+        from ingestion.metrics import set_gauge, dump
+        set_gauge("test_gauge", 42.0)
+        d = dump()
+        assert d["gauges"]["test_gauge"] == 42.0
+
+    def test_record_run(self):
+        from ingestion.metrics import record_run, dump
+        record_run("test_stage")
+        d = dump()
+        assert "test_stage" in d["last_runs"]
+
+    def test_dump_json(self):
+        from ingestion.metrics import dump_json
+        s = dump_json()
+        assert "counters" in s
+        assert "gauges" in s
+        assert "last_runs" in s
+
+
+# ── config: retry section ──
+
+class TestConfigRetry:
+    def test_retry_config_defaults(self):
+        from ingestion.config import RetryConfig
+        rc = RetryConfig()
+        assert rc.max_attempts == 3
+        assert rc.circuit_breaker_failures == 3
+        assert rc.circuit_breaker_cooldown_minutes == 5

@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import Dict, List
 
-# Initial 10 pain-based clusters with 5–8 seed exemplars each
 SEED_EXEMPLARS: Dict[str, List[str]] = {
     "too expensive": [
         "This tool is overpriced for what it does.",
@@ -72,5 +71,74 @@ SEED_EXEMPLARS: Dict[str, List[str]] = {
         "Need native integrations with the basics.",
         "Zapier/Integromat setup is flaky.",
         "Import/export between tools is a pain.",
+    ],
+    "keyword research help": [
+        "How do I find keywords for my niche?",
+        "What's the best way to do keyword research?",
+        "Looking for long-tail keyword ideas.",
+        "How do I check keyword difficulty?",
+        "Need help with search volume data.",
+        "Best tools for keyword clustering?",
+    ],
+    "content optimization": [
+        "How do I optimize my content for SEO?",
+        "Content gaps analysis — what am I missing?",
+        "Need help with on-page SEO.",
+        "How do I create a content strategy for SEO?",
+        "What should my content brief look like?",
+        "How do I improve my content rankings?",
+    ],
+    "technical SEO": [
+        "Site speed is killing my rankings.",
+        "Need help with crawlability issues.",
+        "How do I implement schema markup?",
+        "Core web vitals are poor — where do I start?",
+        "Log file analysis recommendations?",
+        "Hreflang implementation best practices?",
+    ],
+    "SERP analysis": [
+        "How do I track my SERP positions?",
+        "What SERP features should I target?",
+        "Competitor rankings analysis help?",
+        "How do I monitor rank changes over time?",
+        "Best rank tracking tools?",
+    ],
+    "AI for SEO": [
+        "Can AI replace traditional SEO tools?",
+        "Using ChatGPT for keyword research — is it any good?",
+        "AI content generation for SEO — does it rank?",
+        "What's the best AI SEO tool right now?",
+        "How do I use AI for AEO/GEO optimization?",
+        "AI-powered SEO workflows?",
+    ],
+    "link building": [
+        "What's the best backlink strategy in 2026?",
+        "How do I do outreach for link building?",
+        "Best tools for finding link opportunities?",
+        "How do I check domain rating/authority?",
+        "Guest posting still worth it?",
+    ],
+    "local SEO": [
+        "How do I optimize my Google Business Profile?",
+        "Local ranking factors — what matters most?",
+        "Need help with local citations.",
+        "How do I rank in the local pack?",
+        "Local SEO checklist?",
+    ],
+    "brand voice/content gen": [
+        "How do I maintain brand voice across content?",
+        "AI content generation that sounds like me?",
+        "Need help scaling content production.",
+        "How do I create a brand voice guide?",
+        "Content personalization at scale?",
+        "AI image generation for blog content?",
+    ],
+    "GEO/answer engines": [
+        "How do I optimize for Google AI Overview?",
+        "What is answer engine optimization (AEO)?",
+        "Getting cited in Perplexity results?",
+        "How does GEO differ from traditional SEO?",
+        "Optimizing content for AI answer engines?",
+        "How to appear in ChatGPT search results?",
     ],
 }

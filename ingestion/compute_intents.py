@@ -18,6 +18,7 @@ from .jina_client import JinaClient
 from .local_embed import LocalEmbedder
 from .intent_clusters import SEED_EXEMPLARS
 from .logging_config import intent_log as log
+from .metrics import incr, record_run
 
 
 def dot(a: List[float], b: List[float]) -> float:
@@ -243,6 +244,8 @@ def classify_posts(db_path: str = "data.sqlite3", min_prefilter: float = 0.35, b
         upsert_intent(con, post_id, best_cluster, best_score, json.dumps(top_alt), decided_at)
 
     print(f"Classified {len(rows)} posts with intents.")
+    incr("intents_classified", len(rows))
+    record_run("compute_intents")
 
 
 if __name__ == "__main__":

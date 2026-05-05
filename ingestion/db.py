@@ -1,6 +1,7 @@
 import sqlite3
+import time as _time
 from pathlib import Path
-from typing import Iterable, Optional, Sequence, Tuple, List
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS enrichments (
   perplexity JSON,
   dataforseo JSON,
   firecrawl JSON,
+  browser_use JSON,
   cost_cents INTEGER DEFAULT 0,
   fetched_at INTEGER NOT NULL,
   FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
@@ -83,8 +85,69 @@ CREATE TABLE IF NOT EXISTS approvals (
   edited_text TEXT,
   decided_at INTEGER NOT NULL,
   channel TEXT,
+  reviewer_note TEXT,
   FOREIGN KEY(candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
 );
+
+-- Sentiment analysis results
+CREATE TABLE IF NOT EXISTS sentiment (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL,
+  target TEXT NOT NULL,
+  sentiment TEXT NOT NULL CHECK(sentiment IN ('positive','neutral','negative')),
+  confidence REAL NOT NULL,
+  extracted_quote TEXT,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_sentiment_target ON sentiment(target);
+CREATE INDEX IF NOT EXISTS idx_sentiment_post ON sentiment(post_id);
+
+-- Leads (high-value prospects)
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  author TEXT,
+  url TEXT NOT NULL,
+  author_bio TEXT,
+  intent_cluster TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0,
+  lead_score REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','contacted','converted','lost','ignored')),
+  notes TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE INDEX IF NOT EXISTS idx_leads_score ON leads(lead_score DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_post ON leads(post_id);
+
+-- Post performance tracking
+CREATE TABLE IF NOT EXISTS post_performance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  approval_id INTEGER NOT NULL,
+  candidate_id INTEGER NOT NULL,
+  post_id INTEGER NOT NULL,
+  platform TEXT NOT NULL,
+  post_url TEXT,
+  posted_at INTEGER,
+  upvotes_initial INTEGER,
+  upvotes_current INTEGER,
+  replies_initial INTEGER,
+  replies_current INTEGER,
+  clicks INTEGER DEFAULT 0,
+  conversions INTEGER DEFAULT 0,
+  last_polled_at INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','posted','failed','deleted')),
+  FOREIGN KEY(approval_id) REFERENCES approvals(id) ON DELETE CASCADE,
+  FOREIGN KEY(candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+  FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_pp_candidate ON post_performance(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_pp_status ON post_performance(status);
+CREATE INDEX IF NOT EXISTS idx_pp_platform ON post_performance(platform);
 """
 
 
@@ -97,6 +160,15 @@ def connect(db_path: str) -> sqlite3.Connection:
 
 def init_db(con: sqlite3.Connection) -> None:
     con.executescript(SCHEMA)
+    # Migration: add browser_use column to enrichments if missing
+    try:
+        con.execute("ALTER TABLE enrichments ADD COLUMN browser_use JSON")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        con.execute("ALTER TABLE approvals ADD COLUMN reviewer_note TEXT")
+    except sqlite3.OperationalError:
+        pass
 
 
 def upsert_posts(con: sqlite3.Connection, rows: Sequence[Tuple[str, str, Optional[str], str, int, float, str, float, float]]) -> int:
@@ -231,12 +303,141 @@ def posts_for_enrichment(con: sqlite3.Connection, allowed_clusters: List[str], l
 
 
 def insert_enrichment(con: sqlite3.Connection, post_id: int, perplexity_json: str | None, dataforseo_json: str | None,
-                      firecrawl_json: str | None, cost_cents: int, fetched_at: int) -> None:
+                      firecrawl_json: str | None, browser_use_json: str | None,
+                      cost_cents: int, fetched_at: int) -> None:
     con.execute(
         """
-        INSERT OR REPLACE INTO enrichments(post_id, perplexity, dataforseo, firecrawl, cost_cents, fetched_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO enrichments(post_id, perplexity, dataforseo, firecrawl, browser_use, cost_cents, fetched_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(post_id) DO UPDATE SET
+          perplexity=excluded.perplexity,
+          dataforseo=excluded.dataforseo,
+          firecrawl=excluded.firecrawl,
+          browser_use=excluded.browser_use,
+          cost_cents=excluded.cost_cents,
+          fetched_at=excluded.fetched_at
         """,
-        (post_id, perplexity_json, dataforseo_json, firecrawl_json, cost_cents, fetched_at),
+        (post_id, perplexity_json, dataforseo_json, firecrawl_json, browser_use_json, cost_cents, fetched_at),
     )
     con.commit()
+
+
+def insert_lead(con: sqlite3.Connection, post_id: int, source: str, author: str | None,
+                url: str, intent_cluster: str, confidence: float, lead_score: float,
+                created_at: int) -> int:
+    cur = con.execute(
+        """
+        INSERT INTO leads(post_id, source, author, url, intent_cluster, confidence, lead_score, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)
+        """,
+        (post_id, source, author, url, intent_cluster, confidence, lead_score, created_at, created_at),
+    )
+    con.commit()
+    return cur.lastrowid
+
+
+def update_lead_status(con: sqlite3.Connection, lead_id: int, status: str, notes: str | None = None) -> None:
+    now = int(_time.time())
+    con.execute(
+        "UPDATE leads SET status = ?, notes = COALESCE(?, notes), updated_at = ? WHERE id = ?",
+        (status, notes, now, lead_id),
+    )
+    con.commit()
+
+
+def load_leads(con: sqlite3.Connection, status: str | None = None, min_score: float = 0,
+               limit: int = 50, offset: int = 0) -> List:
+    if status:
+        cur = con.execute(
+            "SELECT * FROM leads WHERE status = ? AND lead_score >= ? ORDER BY lead_score DESC, created_at DESC LIMIT ? OFFSET ?",
+            (status, min_score, limit, offset),
+        )
+    else:
+        cur = con.execute(
+            "SELECT * FROM leads WHERE lead_score >= ? ORDER BY lead_score DESC, created_at DESC LIMIT ? OFFSET ?",
+            (min_score, limit, offset),
+        )
+    return cur.fetchall()
+
+
+def lead_exists_for_post(con: sqlite3.Connection, post_id: int) -> bool:
+    cur = con.execute("SELECT 1 FROM leads WHERE post_id = ?", (post_id,))
+    return cur.fetchone() is not None
+
+
+def insert_sentiment(con: sqlite3.Connection, post_id: int, target: str, sentiment: str,
+                     confidence: float, extracted_quote: str | None, created_at: int) -> None:
+    con.execute(
+        """
+        INSERT INTO sentiment(post_id, target, sentiment, confidence, extracted_quote, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (post_id, target, sentiment, confidence, extracted_quote, created_at),
+    )
+    con.commit()
+
+
+def load_sentiment_for_post(con: sqlite3.Connection, post_id: int) -> List:
+    cur = con.execute(
+        "SELECT target, sentiment, confidence, extracted_quote FROM sentiment WHERE post_id = ? ORDER BY confidence DESC",
+        (post_id,),
+    )
+    return cur.fetchall()
+
+
+def insert_post_performance(con: sqlite3.Connection, approval_id: int, candidate_id: int,
+                            post_id: int, platform: str, status: str = "pending") -> int:
+    now = int(_time.time())
+    cur = con.execute(
+        """
+        INSERT INTO post_performance(approval_id, candidate_id, post_id, platform, status, posted_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (approval_id, candidate_id, post_id, platform, status, now if status == "posted" else None),
+    )
+    con.commit()
+    return cur.lastrowid
+
+
+def update_post_performance(con: sqlite3.Connection, perf_id: int, **kwargs) -> None:
+    allowed = {"post_url", "upvotes_current", "replies_current", "clicks", "conversions", "status", "last_polled_at"}
+    sets = []
+    vals = []
+    for k, v in kwargs.items():
+        if k in allowed:
+            sets.append(f"{k} = ?")
+            vals.append(v)
+    if not sets:
+        return
+    vals.append(perf_id)
+    con.execute(f"UPDATE post_performance SET {', '.join(sets)} WHERE id = ?", vals)
+    con.commit()
+
+
+def load_post_performance(con: sqlite3.Connection, status: str | None = None, limit: int = 50) -> List:
+    if status:
+        cur = con.execute(
+            "SELECT * FROM post_performance WHERE status = ? ORDER BY posted_at DESC LIMIT ?",
+            (status, limit),
+        )
+    else:
+        cur = con.execute("SELECT * FROM post_performance ORDER BY posted_at DESC LIMIT ?", (limit,))
+    return cur.fetchall()
+
+
+def lead_count_by_status(con: sqlite3.Connection) -> Dict[str, int]:
+    cur = con.execute("SELECT status, COUNT(*) FROM leads GROUP BY status")
+    return {row[0]: row[1] for row in cur.fetchall()}
+
+
+def sentiment_summary(con: sqlite3.Connection, target: str | None = None) -> List:
+    if target:
+        cur = con.execute(
+            "SELECT sentiment, COUNT(*) as cnt FROM sentiment WHERE target = ? GROUP BY sentiment ORDER BY cnt DESC",
+            (target,),
+        )
+    else:
+        cur = con.execute(
+            "SELECT target, sentiment, COUNT(*) as cnt FROM sentiment GROUP BY target, sentiment ORDER BY target, cnt DESC",
+        )
+    return cur.fetchall()

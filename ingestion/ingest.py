@@ -1,10 +1,12 @@
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Any, List, Tuple
+from typing import Dict, List, Tuple
 
 from .config import AppConfig
 from .db import connect, init_db, upsert_posts
 from .logging_config import log
+from .retry_utils import CircuitBreaker
+from .metrics import incr, record_run
 
 from .reddit_rss import scored_rows as reddit_rows
 from .x_search import scored_rows as x_rows
@@ -15,8 +17,12 @@ from .capterra_scraper import scored_rows as capterra_rows
 from .g2_scraper import scored_rows as g2_rows
 
 
-def _collect_source(source: str, generator, cfg: AppConfig) -> List[Tuple]:
-    """Collect rows from a source generator into the upsert tuple format."""
+def _collect_source(source: str, generator, cfg: AppConfig, breaker: CircuitBreaker | None = None) -> List[Tuple]:
+    """Collect rows from a source generator, respecting circuit breaker states."""
+    if breaker and breaker.is_open:
+        log.warning(f"Circuit breaker open for {source}, skipping")
+        return []
+
     rows: List[Tuple] = []
     try:
         for item in generator:
@@ -31,81 +37,112 @@ def _collect_source(source: str, generator, cfg: AppConfig) -> List[Tuple]:
                 float(item["recency_score"]),
                 float(item["prefilter_score"]),
             ))
+        if breaker:
+            breaker.success()
         log.info(f"Fetched from {source}", extra={"count": len(rows)})
     except Exception as e:
         log.warning(f"Source {source} failed", extra={"error": str(e)})
+        if breaker:
+            breaker.failure()
     return rows
 
 
 def _fetch_all(cfg: AppConfig) -> List[Tuple]:
     """Fetch from all enabled sources in parallel."""
     all_rows: List[Tuple] = []
-    tasks: dict = {}
+    future_to_name: dict = {}
+    breakers: Dict[str, CircuitBreaker] = {
+        name: CircuitBreaker(name, cfg.retry.circuit_breaker_failures, cfg.retry.circuit_breaker_cooldown_minutes * 60)
+        for name in ["reddit", "x", "hackernews", "producthunt", "indiehackers", "capterra", "g2"]
+    }
 
     with ThreadPoolExecutor(max_workers=6) as pool:
         # Reddit
         if cfg.reddit.subreddits:
-            tasks["reddit"] = pool.submit(
+            future = pool.submit(
                 _collect_source, "reddit",
                 reddit_rows(cfg.reddit.subreddits, cfg.reddit.limit_per_feed),
-                cfg,
+                cfg, breakers["reddit"],
             )
+            future_to_name[future] = "reddit"
 
         # X / Nitter
         if cfg.x.search_queries:
-            tasks["x"] = pool.submit(
+            x_bases = [cfg.x.nitter_base, *cfg.x.nitter_fallbacks]
+            future = pool.submit(
                 _collect_source, "x",
-                x_rows(cfg.x.nitter_base, cfg.x.search_queries, 20),
-                cfg,
+                x_rows(
+                    x_bases,
+                    cfg.x.search_queries,
+                    20,
+                    max_queries=cfg.x.max_queries_per_run,
+                    getxapi_product=cfg.x.getxapi_product,
+                ),
+                cfg, breakers["x"],
             )
+            future_to_name[future] = "x"
 
         # HackerNews
         if cfg.hackernews.enabled:
-            tasks["hackernews"] = pool.submit(
+            future = pool.submit(
                 _collect_source, "hackernews",
                 hackernews_rows(limit=cfg.hackernews.limit, min_points=cfg.hackernews.min_points),
-                cfg,
+                cfg, breakers["hackernews"],
             )
+            future_to_name[future] = "hackernews"
 
         # ProductHunt
         if cfg.producthunt.enabled:
-            tasks["producthunt"] = pool.submit(
+            future = pool.submit(
                 _collect_source, "producthunt",
-                producthunt_rows(limit=cfg.producthunt.limit, topic=cfg.producthunt.topic),
-                cfg,
+                producthunt_rows(
+                    limit=cfg.producthunt.limit,
+                    topic=cfg.producthunt.topic,
+                    secondary_topic=cfg.producthunt.secondary_topic,
+                ),
+                cfg, breakers["producthunt"],
             )
+            future_to_name[future] = "producthunt"
 
         # IndieHackers
         if cfg.indiehackers.enabled:
-            tasks["indiehackers"] = pool.submit(
+            future = pool.submit(
                 _collect_source, "indiehackers",
                 indiehackers_rows(limit=cfg.indiehackers.limit),
-                cfg,
+                cfg, breakers["indiehackers"],
             )
+            future_to_name[future] = "indiehackers"
 
         # Capterra
         if cfg.capterra.enabled:
-            tasks["capterra"] = pool.submit(
+            future = pool.submit(
                 _collect_source, "capterra",
                 capterra_rows(
                     categories=cfg.capterra.categories,
                     reviews_per_category=cfg.capterra.reviews_per_category,
+                    competitor_slugs=cfg.capterra.competitor_slugs,
+                    max_review_stars=cfg.capterra.max_review_stars,
                 ),
-                cfg,
+                cfg, breakers["capterra"],
             )
+            future_to_name[future] = "capterra"
 
         # G2
         if cfg.g2.enabled:
-            tasks["g2"] = pool.submit(
+            future = pool.submit(
                 _collect_source, "g2",
                 g2_rows(
                     categories=cfg.g2.categories,
                     reviews_per_category=cfg.g2.reviews_per_category,
+                    competitor_products=cfg.g2.competitor_products,
+                    max_review_stars=cfg.g2.max_review_stars,
                 ),
-                cfg,
+                cfg, breakers["g2"],
             )
+            future_to_name[future] = "g2"
 
-        for name, future in as_completed(tasks):
+        for future in as_completed(future_to_name):
+            name = future_to_name[future]
             try:
                 rows = future.result()
                 all_rows.extend(rows)
@@ -140,6 +177,8 @@ def main() -> None:
         return
 
     inserted = upsert_posts(con, all_rows)
+    incr("posts_ingested", inserted)
+    record_run("ingest")
     log.info("Ingestion complete", extra={"seen": len(all_rows), "inserted": inserted})
 
 

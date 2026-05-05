@@ -18,7 +18,7 @@ class JsonFormatter(logging.Formatter):
         }
         if record.exc_info and record.exc_info[1]:
             payload["exc"] = repr(record.exc_info[1])
-        for key in ("source", "post_id", "batch_size", "count", "cost_cents", "cluster"):
+        for key in ("source", "post_id", "batch_size", "count", "cost_cents", "cluster", "label", "url", "error"):
             val = getattr(record, key, None)
             if val is not None:
                 payload[key] = val
@@ -34,8 +34,9 @@ def setup(name: str | None = None, level: int = logging.INFO, json_output: bool 
             h.setFormatter(JsonFormatter())
         else:
             h.setFormatter(logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                "%(asctime)s [%(levelname)s] %(name)s: %(message)s %(error)s",
                 datefmt="%Y-%m-%dT%H:%M:%S",
+                defaults={"error": ""},
             ))
         logger.addHandler(h)
     return logger

@@ -3,7 +3,9 @@ import os
 from typing import List, Dict, Any
 import requests
 
+from .env_loader import load_local_env
 from .logging_config import log
+from .retry_utils import http_retry
 
 JINA_URL = "https://api.jina.ai/v1/embeddings"
 DEFAULT_BATCH_SIZE = 32
@@ -13,6 +15,7 @@ class JinaClient:
     def __init__(self, api_key: str | None = None, model: str = "jina-embeddings-v5-text-nano",
                  dimensions: int | None = 512, task: str = "retrieval.passage",
                  normalized: bool = True, timeout: int = 30, batch_size: int = DEFAULT_BATCH_SIZE):
+        load_local_env()
         key = api_key or os.getenv("JINA_API_KEY") or ""
         key = key.strip()
         if not key:
@@ -35,6 +38,7 @@ class JinaClient:
             all_vectors.extend(vecs)
         return all_vectors
 
+    @http_retry(max_attempts=3, min_wait=1.0, max_wait=15.0)
     def _embed_batch(self, texts: List[str]) -> List[List[float]]:
         headers = {
             "Content-Type": "application/json",

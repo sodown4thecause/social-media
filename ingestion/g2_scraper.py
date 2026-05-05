@@ -1,110 +1,146 @@
 from __future__ import annotations
 import hashlib
-import html
-import re
 import time
 from typing import Dict, Any, Iterable, List
 
-import requests
+from pydantic import BaseModel, Field
 
 from .prefilter import prefilter
 from .logging_config import log
-
-G2_REVIEW_URL = "https://www.g2.com/categories/{category}"
-
-STRIP_HTML = re.compile(r"<[^>]+>")
-WS_COLLAPSE = re.compile(r"\s+")
-REVIEW_BLOCK_RE = re.compile(
-    r'<div[^>]*class="[^"]*review[^"]*"[^>]*>.*?</div>\s*</div>\s*</div>',
-    re.IGNORECASE | re.DOTALL,
-)
-REVIEW_PRO_RE = re.compile(
-    r'<p[^>]*class="[^"]*(?:formatted-text|review-text|body)[^"]*"[^>]*>(.*?)</p>',
-    re.IGNORECASE | re.DOTALL,
-)
-REVIEW_CON_RE = re.compile(
-    r'<p[^>]*class="[^"]*(?:formatted-text|review-text|cons)[^"]*"[^>]*>(.*?)</p>',
-    re.IGNORECASE | re.DOTALL,
-)
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+from .browser_use_client import run_task
+from .review_extract import extract_review_nodes
+from .scrapingbee_client import fetch_html
 
 
-def _clean_html(raw: str) -> str:
-    t = STRIP_HTML.sub(" ", raw)
-    t = html.unescape(t)
-    t = WS_COLLAPSE.sub(" ", t)
-    return t.strip()
+class G2Review(BaseModel):
+    pros: str = Field(default="", description="What the reviewer liked / pros")
+    cons: str = Field(default="", description="What the reviewer disliked / cons")
+    overall_comment: str = Field(default="", description="Overall review comment")
+    rating: float | None = Field(default=None, description="Star rating (1-5)")
+    reviewer_name: str | None = Field(default=None, description="Name of the reviewer")
+    reviewer_title: str | None = Field(default=None, description="Job title of the reviewer")
 
 
-def _extract_reviews(html_str: str, limit: int) -> List[Dict[str, str]]:
-    results: List[Dict[str, str]] = []
-
-    # Look for pros/cons review text blocks
-    pros = REVIEW_PRO_RE.findall(html_str)
-    cons = REVIEW_CON_RE.findall(html_str)
-
-    for i in range(min(len(pros), limit)):
-        pro_text = _clean_html(pros[i])
-        con_text = _clean_html(cons[i]) if i < len(cons) else ""
-        if len(pro_text) < 30:
-            continue
-        combined = f"Pros: {pro_text}"
-        if con_text:
-            combined += f"\nCons: {con_text}"
-        results.append({"title": "", "text": combined})
-
-    return results
+class G2Result(BaseModel):
+    reviews: List[G2Review] = Field(default_factory=list, description="Extracted reviews from G2")
 
 
 def fetch_g2(
     categories: List[str] | None = None,
     reviews_per_category: int = 20,
-    timeout: int = 30,
+    competitor_products: List[str] | None = None,
+    max_review_stars: int = 3,
 ) -> Iterable[Dict[str, Any]]:
     if categories is None:
         categories = ["seo", "marketing-analytics"]
+    if competitor_products is None:
+        competitor_products = []
 
-    session = requests.Session()
-    session.headers.update(HEADERS)
+    now = int(time.time())
 
     for cat in categories:
-        url = G2_REVIEW_URL.format(category=cat)
-        log.info("Fetching G2 reviews", extra={"category": cat, "url": url})
-        try:
-            r = session.get(url, timeout=timeout)
-            r.raise_for_status()
-        except requests.RequestException as e:
-            log.warning("G2 fetch failed", extra={"category": cat, "error": str(e)})
+        url = f"https://www.g2.com/categories/{cat}"
+        yield from _scrape_g2_url(url, cat, reviews_per_category, now, max_review_stars)
+
+    for prod in competitor_products:
+        url = f"https://www.g2.com/products/{prod}/reviews"
+        yield from _scrape_g2_url(url, prod, reviews_per_category, now, max_review_stars)
+
+
+def _scrape_g2_url(url: str, label: str, limit: int, now: int, max_stars: int = 5) -> Iterable[Dict[str, Any]]:
+    rows = list(_scrape_g2_with_scrapingbee(url, label, limit, now, max_stars=max_stars))
+    if rows:
+        yield from rows
+        return
+
+    log.info("Fetching G2 via browser-use", extra={"label": label, "url": url})
+    try:
+        result = run_task(
+            f"Go to {url}. Extract up to {limit} user reviews from the page. "
+            f"For each review, get: pros (what they liked), cons (what they disliked), "
+            f"overall comment, star rating (1-5), reviewer name, and reviewer job title if shown. "
+            f"Prioritize reviews with {max_stars} stars or fewer. Return as structured data.",
+            output_schema=G2Result,
+        )
+    except Exception as e:
+        log.warning("G2 browser-use failed", extra={"label": label, "error": str(e)})
+        return
+
+    if not isinstance(result, G2Result) or not result.reviews:
+        log.info("G2 returned no reviews", extra={"label": label})
+        return
+
+    for rev in result.reviews:
+        parts = []
+        if rev.pros:
+            parts.append(f"Pros: {rev.pros}")
+        if rev.cons:
+            parts.append(f"Cons: {rev.cons}")
+        if rev.overall_comment:
+            parts.append(rev.overall_comment)
+        full_text = "\n".join(parts)
+        if not full_text or len(full_text.strip()) < 30:
             continue
+        if rev.rating and rev.rating > max_stars:
+            continue
+        yield {
+            "url": url,
+            "author": rev.reviewer_name,
+            "text": full_text.strip(),
+            "created_at": now,
+            "upvotes": int(rev.rating) if rev.rating else None,
+            "comments": None,
+        }
 
-        reviews = _extract_reviews(r.text, reviews_per_category)
-        now = int(time.time())
+    log.info("G2 reviews fetched via browser-use", extra={"label": label, "count": len(result.reviews)})
 
-        for rev in reviews:
-            full_text = f"{rev['title']}\n{rev['text']}" if rev["title"] else rev["text"]
-            h = hashlib.sha1(f"{full_text}:{now}:{cat}".encode("utf-8")).hexdigest()
-            yield {
-                "url": url,
-                "author": None,
-                "text": full_text,
-                "created_at": now,
-                "upvotes": None,
-                "comments": None,
-            }
 
-        log.info("G2 reviews fetched", extra={"category": cat, "count": len(reviews)})
+def _scrape_g2_with_scrapingbee(url: str, label: str, limit: int, now: int, max_stars: int = 5) -> Iterable[Dict[str, Any]]:
+    try:
+        page_html = fetch_html(url, render_js=True, timeout=120, premium_proxy=True, country_code="us")
+    except Exception as e:
+        log.warning("G2 ScrapingBee fetch failed", extra={"label": label, "error": str(e)})
+        return
+    if not page_html:
+        return
+
+    count = 0
+    for review in extract_review_nodes(page_html):
+        if count >= limit:
+            break
+        rating = review.get("rating")
+        if rating and rating > max_stars:
+            continue
+        text = review.get("text") or ""
+        if len(text) < 30:
+            continue
+        title = review.get("title") or ""
+        full_text = f"{title}\n{text}" if title and title != text else text
+        count += 1
+        yield {
+            "url": url,
+            "author": review.get("author"),
+            "text": full_text.strip(),
+            "created_at": now,
+            "upvotes": int(rating) if rating else None,
+            "comments": None,
+        }
+    if count:
+        log.info("G2 reviews fetched via ScrapingBee", extra={"label": label, "count": count})
 
 
 def scored_rows(
     categories: List[str] | None = None,
     reviews_per_category: int = 20,
+    competitor_products: List[str] | None = None,
+    max_review_stars: int = 3,
 ) -> Iterable[Dict[str, Any]]:
-    for item in fetch_g2(categories=categories, reviews_per_category=reviews_per_category):
+    for item in fetch_g2(
+        categories=categories,
+        reviews_per_category=reviews_per_category,
+        competitor_products=competitor_products,
+        max_review_stars=max_review_stars,
+    ):
         pf = prefilter(item["text"], item["created_at"], item.get("upvotes"), item.get("comments"))
         h = hashlib.sha1(f"{pf.text}:{pf.created_at}".encode("utf-8")).hexdigest()
         yield {
@@ -113,4 +149,5 @@ def scored_rows(
             "recency_score": pf.recency_score,
             "prefilter_score": pf.score,
             "hash": h,
+            "engagement": float(item.get("upvotes") or 0),
         }

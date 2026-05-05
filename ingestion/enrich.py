@@ -17,6 +17,8 @@ from .db import (
 )
 from .config import AppConfig
 from .logging_config import enrich_log as log
+from .metrics import incr, record_run
+from .browser_use_client import run_task, set_api_key
 
 
 def load_config(path: str | None = None) -> Dict[str, Any]:
@@ -102,6 +104,23 @@ def call_firecrawl_agent(prompt: str, model: str, max_credits: int, api_key: Opt
     return r.json()
 
 
+def call_browser_use_enrich(text: str, source: str) -> dict:
+    """Use browser-use agent to research the topic live on the web."""
+    task = (
+        f"Research the following post from {source} and find relevant information about the tools, "
+        f"pricing, competitors, and alternatives mentioned. Return a JSON with fields: "
+        f"tools_found (list of tool names), pricing_info (string summary), "
+        f"competitors (list of competing tools), and key_insights (string).\n\n"
+        f"Post content: {text[:1000]}"
+    )
+    raw = run_task(task)
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        return {"raw_output": raw}
+    return {"error": "No output"}
+
+
 # -------- Strategy --------
 
 COMPETITOR_KEYWORDS = [
@@ -146,12 +165,8 @@ def enrich_once() -> None:
     px_key = os.getenv("PERPLEXITY_API_KEY")
 
     dataforseo_enabled = cfg.enrichment.dataforseo_enabled
-    dfs_login = (
-        cfg.enrichment.dataforseo_login
-        or os.getenv("DATAFORSEO_LOGIN")
-        or os.getenv("DATAFORSEO_USERNAME")
-    )
-    dfs_password = cfg.enrichment.dataforseo_password or os.getenv("DATAFORSEO_PASSWORD")
+    dfs_login = os.getenv("DATAFORSEO_LOGIN") or os.getenv("DATAFORSEO_USERNAME")
+    dfs_password = os.getenv("DATAFORSEO_PASSWORD")
     dfs_loc = cfg.enrichment.dataforseo_location_name
     dfs_lang = cfg.enrichment.dataforseo_language_name
     dfs_depth = cfg.enrichment.dataforseo_depth
@@ -163,11 +178,18 @@ def enrich_once() -> None:
     fc_cost = cfg.enrichment.firecrawl_cost_cents
     fc_key = os.getenv("FIRECRAWL_API_KEY")
 
+    bu_enabled = cfg.enrichment.browser_use_enabled
+    bu_cost = cfg.enrichment.browser_use_cost_cents
+    bu_key = os.getenv("BROWSER_USE_API_KEY")
+    if bu_key:
+        set_api_key(bu_key)
+
     for post_id, source, text, conf in rows:
         cost_cents = 0
         px_json = None
         dfs_json = None
         fc_json = None
+        bu_json = None
 
         # Perplexity (claim/evidence summary)
         if perplexity_enabled and px_key and remaining - cost_cents >= perplexity_cost:
@@ -199,6 +221,14 @@ def enrich_once() -> None:
             except Exception as e:
                 fc_json = {"error": str(e)}
 
+        # Browser Use Agent (optional: live web research)
+        if bu_enabled and bu_key and remaining - cost_cents >= bu_cost:
+            try:
+                bu_json = call_browser_use_enrich(text, source)
+                cost_cents += bu_cost
+            except Exception as e:
+                bu_json = {"error": str(e)}
+
         if cost_cents == 0:
             print(f'No providers called for post {post_id} (missing keys or budget).')
             continue
@@ -206,12 +236,16 @@ def enrich_once() -> None:
         insert_enrichment(con, post_id, json.dumps(px_json) if px_json else None,
                           json.dumps(dfs_json) if dfs_json else None,
                           json.dumps(fc_json) if fc_json else None,
+                          json.dumps(bu_json) if bu_json else None,
                           cost_cents, int(time.time()))
+        incr("enrichment_cost_cents", cost_cents)
         remaining -= cost_cents
         print(f'Enriched post {post_id} with cost {cost_cents}c. Remaining today: {remaining}c')
         if remaining <= 0:
             print('Daily budget reached.')
             break
+
+    record_run("enrich")
 
 
 if __name__ == '__main__':

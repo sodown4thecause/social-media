@@ -1,9 +1,9 @@
 from __future__ import annotations
 import time
 from typing import Iterable, Dict, Any, List
-import feedparser
 
 from .prefilter import prefilter
+from .feed_utils import clean_feed_text, fetch_feed
 
 
 def subreddit_rss_urls(subreddits: List[str], limit_per_feed: int = 25) -> List[str]:
@@ -13,8 +13,8 @@ def subreddit_rss_urls(subreddits: List[str], limit_per_feed: int = 25) -> List[
 
 def parse_reddit_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
     # Feed content fields are inconsistent; fall back smartly
-    title = (entry.get("title") or "").strip()
-    summary = (entry.get("summary") or "").strip()
+    title = clean_feed_text(entry.get("title"))
+    summary = clean_feed_text(entry.get("summary"))
     content_text = title if len(title) > len(summary) else summary
     link = entry.get("link") or ""
     author = (entry.get("author") or "").strip() or None
@@ -37,7 +37,7 @@ def parse_reddit_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
 def fetch_reddit(subreddits: List[str], limit_per_feed: int = 25):
     urls = subreddit_rss_urls(subreddits, limit_per_feed)
     for url in urls:
-        feed = feedparser.parse(url)
+        feed = fetch_feed(url)
         for entry in feed.entries:
             yield parse_reddit_entry(entry)
 

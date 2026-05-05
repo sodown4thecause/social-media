@@ -83,13 +83,29 @@ python -m ingestion.review_cli
 
 Copy the approved/edited text for manual posting on the platform.
 
+## Browser Review App
+
+For a normal website-style review UI:
+
+```bash
+python -m webapp.server
+```
+
+Then open `http://127.0.0.1:8765`. The app keeps human review in the loop: it lets you inspect signals, edit replies, approve/reject candidates, and save review-site opportunities as leads without sending anything automatically.
+
 ---
 
 # M3.5 — Selective Enrichment (Perplexity, DataForSEO, Firecrawl)
 
-Configure `config.json` budget and toggles. Set API keys via environment variables:
+Configure `config.json` budget and toggles. Put API keys in your ignored `.env` file, or set them as environment variables:
 
 ```powershell
+# LLM
+$env:XAI_API_KEY="<your-key>"
+
+# Embeddings
+$env:JINA_API_KEY="<your-key>"
+
 # Perplexity
 $env:PERPLEXITY_API_KEY="<your-key>"
 
@@ -102,6 +118,18 @@ $env:DATAFORSEO_PASSWORD="<password>"
 
 # Firecrawl
 $env:FIRECRAWL_API_KEY="<your-key>"
+
+# Browser Use, for dynamic review-site extraction
+$env:BROWSER_USE_API_KEY="<your-key>"
+
+# Reddit posting only; Reddit RSS reading does not need these
+$env:REDDIT_CLIENT_ID="<client-id>"
+$env:REDDIT_CLIENT_SECRET="<client-secret>"
+$env:REDDIT_USERNAME="<username>"
+$env:REDDIT_PASSWORD="<password>"
+
+# X posting through GetXAPI
+$env:GETXAPI_API_KEY="<your-key>"
 ```
 
 Run enrichment (respects daily budget and allowed intents):
